@@ -1,98 +1,244 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState, useRef } from "react";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import {
+  View,
+  Text,
+  FlatList,
+  Image,
+  StyleSheet,
+  ActivityIndicator,
+  Pressable,
+  TextInput,
+  Dimensions,
+} from "react-native";
+import { useRouter } from "expo-router";
+import axios from "axios";
+import { Ionicons } from "@expo/vector-icons";
 
-export default function HomeScreen() {
+const { width } = Dimensions.get("window");
+const BASE_URL = "https://back-end-nodejs-production-d9de.up.railway.app";
+
+export default function CategoriesScreen() {
+  const [images, setImages] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [filteredCategories, setFilteredCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  const flatListRef = useRef(null);
+  const currentIndex = useRef(0);
+  const router = useRouter();
+
+  // 🔹 جلب البيانات
+  useEffect(() => {
+    fetchImages();
+    fetchCategories();
+  }, []);
+
+  const fetchImages = async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}/api/home`);
+      setImages(res.data || []);
+    } catch (error) {
+      console.log("HOME API ERROR:", error.message);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}/api/product`);
+      setCategories(res.data || []);
+      setFilteredCategories(res.data || []);
+    } catch (error) {
+      console.log("CATEGORY API ERROR:", error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔹 دالة تحويل الاسم العربي → انجليزي
+  const generateCategoryEn = (title) => {
+    switch (title) {
+      case "الحوم":
+        return "meat";
+      case "افخاذ دجاج":
+        return "chicken";
+      case "مشروبات غازيه":
+        return "drinks";
+      case "عروض خاصه":
+        return "Offers";
+      case "المياه":
+        return "waters";
+      default:
+        return title.toLowerCase().replace(/\s+/g, "-");
+    }
+  };
+
+  // 🔹 البحث في الأقسام فقط
+  useEffect(() => {
+    if (!search) {
+      setFilteredCategories(categories);
+    } else {
+      const filtered = categories.filter((item) =>
+        item.title.toLowerCase().includes(search.toLowerCase())
+      );
+      setFilteredCategories(filtered);
+    }
+  }, [search, categories]);
+
+  // 🔹 سلايدر تلقائي
+  useEffect(() => {
+    if (images.length === 0) return;
+    const interval = setInterval(() => {
+      currentIndex.current =
+        currentIndex.current === images.length - 1
+          ? 0
+          : currentIndex.current + 1;
+
+      flatListRef.current?.scrollToIndex({
+        index: currentIndex.current,
+        animated: true,
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [images]);
+
+  if (loading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color="#00E5FF" />
+      </View>
+    );
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+    <>
+      {/* ===== شريط البحث ===== */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={20} color="#ccc" style={{ marginRight: 8 }} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="ابحث عن القسم ..."
+          placeholderTextColor="#ccc"
+          value={search}
+          onChangeText={setSearch}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+      </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      <View style={{ flex: 0 }}>
+        {/* ===== سلايدر Home ===== */}
+        {images.length > 0 && (
+          <FlatList
+            ref={flatListRef}
+            data={images}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item, index) => item._id || index.toString()}
+            renderItem={({ item }) => (
+              <View style={styles.slide}>
+                <Image
+                  source={{ uri: item.image }}
+                  style={styles.sliderImage}
+                />
+              </View>
+            )}
+            onScrollToIndexFailed={() => {}}
+          />
+        )}
+
+        {/* ===== عنوان الأقسام مع بوردر ===== */}
+        <View style={styles.headerContainer}>
+          <Text style={styles.headerText}>الأقسام</Text>
+          <View style={styles.headerBorder} />
+        </View>
+
+        {/* ===== قائمة الأقسام ===== */}
+        <FlatList
+          data={filteredCategories}
+          keyExtractor={(item) => item._id}
+          numColumns={5}
+          contentContainerStyle={{ padding: 10 }}
+          renderItem={({ item }) => (
+            <Pressable
+              style={styles.card}
+              onPress={() =>
+                router.push({
+                  pathname: "/CategoryDetails",
+                  params: {
+                    category: generateCategoryEn(item.title),
+                    title: item.title,
+                  },
+                })
+              }
+            >
+              <Image
+                source={{ uri: item.image }}
+                style={styles.image}
+              />
+              <Text style={styles.title}>{item.title}</Text>
+            </Pressable>
+          )}
+        />
+      </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+  sliderImage: {
+    width: width - 40,
+    height: 180,
+    borderRadius: 16,
+    marginHorizontal: 40,
+    marginVertical: 10,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  slide: { width, alignItems: "center" },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 10,
+    marginHorizontal: 20,
+    marginVertical: 30,
+    paddingHorizontal: 10,
+    height: 40,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  searchInput: { flex: 1, color: "#fff", height: "100%" },
+  card: {
+    flex: 1,
+    margin: 1,
+    borderRadius: 10,
+    backgroundColor: "#1e1b4b",
+    alignItems: "center",
+    padding: 4,
+  },
+  image: {
+    width: "104%",
+    height: 80,
+    borderRadius: 10,
+    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: "#00E5FF",
+  },
+  title: { color: "#fff", fontSize: 16, fontWeight: "bold", textAlign: "center" },
+  headerContainer: {
+    marginHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  headerText: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "bold",
+    textAlign: "right",
+  },
+  headerBorder: {
+    height: 2,
+    backgroundColor: "#fff",
+    marginTop: 5,
+    width: "20%",
+    alignSelf: "flex-end",
   },
 });
