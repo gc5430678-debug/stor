@@ -1,3 +1,4 @@
+// ... جميع الاستيرادات كما هي
 import React, { useEffect, useState, useRef } from "react";
 import {
   View,
@@ -12,7 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useCart } from "../../context/CartContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import MapView, { Marker, AnimatedRegion } from "react-native-maps";
+import { WebView } from "react-native-webview";
 import axios from "axios";
 
 const BASE_URL = "https://back-end-nodejs-production-fdc5.up.railway.app";
@@ -34,32 +35,31 @@ export default function Cared() {
   const [orderedItems, setOrderedItems] = useState([]);
   const [orderedTotal, setOrderedTotal] = useState(0);
   const [showEmptyMessage, setShowEmptyMessage] = useState(false);
+  const [quantityError, setQuantityError] = useState({}); 
 
-  const [quantityError, setQuantityError] = useState({}); // لتخزين رسائل الخطأ لكل منتج
+  const markerWebViewRef = useRef(null);
 
-  const markerRef = useRef(null);
-
-  let clientLat = 0,
-    clientLng = 0;
+  let clientLat = 0, clientLng = 0;
   if (location) [clientLat, clientLng] = location.split(",").map(Number);
-
-  const [delverRegion] = useState(
-    new AnimatedRegion({
-      latitude: clientLat,
-      longitude: clientLng,
-      latitudeDelta: 0.05,
-      longitudeDelta: 0.05,
-    })
-  );
 
   // ================= USER DATA =================
   useEffect(() => {
     const fetchUserData = async () => {
-      setEmail(await AsyncStorage.getItem("email"));
-      setPhone(await AsyncStorage.getItem("phone"));
-      setLocation(await AsyncStorage.getItem("location"));
-      setName(await AsyncStorage.getItem("name"));
+      const storedEmail = await AsyncStorage.getItem("email");
+      const storedPhone = await AsyncStorage.getItem("phone");
+      const storedLocation = await AsyncStorage.getItem("location");
+      const storedName = await AsyncStorage.getItem("name");
+      const storedOrderStatus = await AsyncStorage.getItem("orderStatus");
+      const storedDelver = await AsyncStorage.getItem("delverData");
+
+      setEmail(storedEmail);
+      setPhone(storedPhone);
+      setLocation(storedLocation);
+      setName(storedName);
       setItemsData(cartItems.map((item) => ({ ...item })));
+      setOrderStatus(storedOrderStatus);
+      if (storedDelver) setDelverData(JSON.parse(storedDelver));
+
       setIsLoading(false);
     };
     fetchUserData();
@@ -84,6 +84,7 @@ export default function Cared() {
 
       if (res.data.success) {
         setOrderStatus("pending");
+        AsyncStorage.setItem("orderStatus", "pending"); // تخزين الحالة
         setShowEmptyMessage(false);
       }
     } catch (err) {
@@ -91,18 +92,24 @@ export default function Cared() {
     }
   };
 
-  // ================= DISTANCE =================
-  const getDistance = (lat1, lon1, lat2, lon2) => {
-    const toRad = (v) => (v * Math.PI) / 180;
-    const R = 6371000;
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(lat1)) *
-        Math.cos(toRad(lat2)) *
-        Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  // ================= QUANTITY HANDLERS =================
+  const handleIncrease = (item) => {
+    const availableQty = item.quantityAvailable ?? 0;
+    if (item.quantity + 1 > availableQty) {
+      setQuantityError((prev) => ({
+        ...prev,
+        [item.uniqueId]: "❌ الكمية غير متوفرة",
+      }));
+      return;
+    }
+    setQuantityError((prev) => ({ ...prev, [item.uniqueId]: null }));
+    updateQuantity(item.uniqueId, item.quantity + 1);
+  };
+
+  const handleDecrease = (item) => {
+    if (item.quantity - 1 < 1) return;
+    updateQuantity(item.uniqueId, item.quantity - 1);
+    setQuantityError((prev) => ({ ...prev, [item.uniqueId]: null }));
   };
 
   // ================= DELVER TRACK =================
@@ -118,35 +125,33 @@ export default function Cared() {
         if (res.data.success) {
           const { delver } = res.data;
 
-          setDelverData({
+          const delverObj = {
             name: delver.name,
             phone: delver.phone,
             location: delver.currentLocation,
-          });
+          };
+
+          setDelverData(delverObj);
+          AsyncStorage.setItem("delverData", JSON.stringify(delverObj)); // حفظ بيانات المندوب
 
           if (orderStatus === "pending") {
             setOrderStatus("preparing");
+            AsyncStorage.setItem("orderStatus", "preparing");
           }
 
-          if (delver.currentLocation?.latitude && markerRef.current) {
-            delverRegion.timing({
-              latitude: delver.currentLocation.latitude,
-              longitude: delver.currentLocation.longitude,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
-            }).start();
-
-            const distance = getDistance(
-              delver.currentLocation.latitude,
-              delver.currentLocation.longitude,
-              clientLat,
-              clientLng
+          // تحديث موقع المندوب على الخريطة
+          if (
+            markerWebViewRef.current &&
+            delver.currentLocation?.latitude &&
+            delver.currentLocation?.longitude
+          ) {
+            markerWebViewRef.current.postMessage(
+              JSON.stringify({
+                lat: delver.currentLocation.latitude,
+                lng: delver.currentLocation.longitude,
+                name: delver.name,
+              })
             );
-
-            if (distance < 10) {
-              setOrderStatus("delivered");
-              setShowOk(true);
-            }
           }
         }
       } catch (err) {
@@ -189,26 +194,6 @@ export default function Cared() {
     );
   };
 
-  // ================= QUANTITY HANDLERS =================
-  const handleIncrease = (item) => {
-    const availableQty = item.quantityAvailable ?? 0; // ← استخدام الكمية المتوفرة من الباك اند
-    if (item.quantity + 1 > availableQty) {
-      setQuantityError((prev) => ({
-        ...prev,
-        [item.uniqueId]: "❌ الكمية غير متوفرة",
-      }));
-      return;
-    }
-    setQuantityError((prev) => ({ ...prev, [item.uniqueId]: null }));
-    updateQuantity(item.uniqueId, item.quantity + 1);
-  };
-
-  const handleDecrease = (item) => {
-    if (item.quantity - 1 < 1) return;
-    updateQuantity(item.uniqueId, item.quantity - 1);
-    setQuantityError((prev) => ({ ...prev, [item.uniqueId]: null }));
-  };
-
   if (isLoading) {
     return (
       <View style={styles.emptyContainer}>
@@ -219,6 +204,7 @@ export default function Cared() {
 
   return (
     <View style={styles.container}>
+      {/* ===================== قائمة السلة ===================== */}
       {!orderStatus && cartItems.length > 0 && !showEmptyMessage && (
         <>
           <Text style={styles.title}>🛒 السلة</Text>
@@ -228,7 +214,6 @@ export default function Cared() {
             keyExtractor={(item) => item.uniqueId}
             renderItem={({ item }) => (
               <View style={styles.card}>
-                {/* صورة المنتج */}
                 <Image
                   source={{
                     uri: item.image.startsWith("http")
@@ -244,7 +229,6 @@ export default function Cared() {
                     {item.price * item.quantity} د.ع
                   </Text>
 
-                  {/* أزرار + و - */}
                   <View style={styles.qtyContainer}>
                     <Pressable
                       style={styles.qtyBtn}
@@ -252,9 +236,7 @@ export default function Cared() {
                     >
                       <Ionicons name="remove" size={18} color="#fff" />
                     </Pressable>
-
                     <Text style={styles.qtyText}>{item.quantity}</Text>
-
                     <Pressable
                       style={styles.qtyBtn}
                       onPress={() => handleIncrease(item)}
@@ -263,7 +245,6 @@ export default function Cared() {
                     </Pressable>
                   </View>
 
-                  {/* رسالة خطأ الكمية */}
                   {quantityError[item.uniqueId] && (
                     <Text style={{ color: "red", marginTop: 2 }}>
                       {quantityError[item.uniqueId]}
@@ -271,7 +252,6 @@ export default function Cared() {
                   )}
                 </View>
 
-                {/* زر حذف */}
                 <Pressable onPress={() => removeFromCart(item.uniqueId)}>
                   <Ionicons name="trash" size={22} color="red" />
                 </Pressable>
@@ -285,50 +265,77 @@ export default function Cared() {
         </>
       )}
 
+      {/* ===================== خريطة المندوب ===================== */}
       {orderStatus && location && (
         <View style={styles.mapContainer}>
-          <MapView
-            style={styles.map}
-            initialRegion={{
-              latitude: clientLat,
-              longitude: clientLng,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
-            }}
-          >
-            <Marker coordinate={{ latitude: clientLat, longitude: clientLng }} />
+          <View style={{ height: 300 }}>
+            <WebView
+              ref={markerWebViewRef}
+              originWhitelist={["*"]}
+              source={{
+                html: `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+                  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                  <style>
+                    html, body { margin:0; padding:0; height:100%; }
+                    #map { width:100%; height:100%; }
+                  </style>
+                </head>
+                <body>
+                  <div id="map"></div>
+                  <script>
+                    var map = L.map('map').setView([${clientLat}, ${clientLng}], 15);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+                    var clientMarker = L.marker([${clientLat}, ${clientLng}]).addTo(map).bindPopup('موقعك').openPopup();
+                    var delverMarker = null;
 
-            {delverData && (
-              <Marker.Animated
-                ref={markerRef}
-                coordinate={delverRegion}
-                title={`🚚 ${delverData.name}`}
-              >
-                <Image
-                  source={require("../../assets/images/d.jpg")}
-                  style={{ width: 50, height: 50 }}
-                  resizeMode="contain"
-                />
-              </Marker.Animated>
-            )}
-          </MapView>
+                    function updateDelver(lat, lng, name) {
+                      if (!delverMarker) {
+                        delverMarker = L.marker([lat, lng]).addTo(map).bindPopup("🚚 " + name).openPopup();
+                      } else {
+                        delverMarker.setLatLng([lat, lng]);
+                      }
+                    }
 
+                    document.addEventListener('message', function(e) {
+                      var data = JSON.parse(e.data);
+                      updateDelver(data.lat, data.lng, data.name);
+                    });
+
+                    // عند فتح الخريطة بعد Refresh، إذا كان هناك مندوب مخزن، أرسله للخريطة
+                    window.onload = function() {
+                      if (${delverData ? "true" : "false"}) {
+                        updateDelver(${delverData?.location?.latitude ?? 0}, ${delverData?.location?.longitude ?? 0}, "${delverData?.name ?? ""}");
+                      }
+                    }
+                  </script>
+                </body>
+                </html>
+              `,
+              }}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+            />
+          </View>
+
+          {/* أيقونات حالة الطلب */}
           <View style={styles.statusContainer}>
             <StatusIcon step="pending" />
             <StatusIcon step="preparing" />
             <StatusIcon step="delivered" />
           </View>
 
+          {/* معلومات المندوب */}
           {delverData && (
             <View style={styles.delverInfo}>
-              <Text style={styles.delverText}>
-                🚚 المندوب: {delverData.name}
-              </Text>
-
+              <Text style={styles.delverText}>🚚 المندوب: {delverData.name}</Text>
               <Pressable
                 onPress={() =>
-                  delverData.phone &&
-                  Linking.openURL(`tel:${delverData.phone}`)
+                  delverData.phone && Linking.openURL(`tel:${delverData.phone}`)
                 }
               >
                 <Text style={styles.delverPhone}>
@@ -343,8 +350,7 @@ export default function Cared() {
                       key={item.uniqueId}
                       style={{ color: "#fff", fontSize: 14, marginTop: 2 }}
                     >
-                      {item.title} × {item.quantity} ={" "}
-                      {item.price * item.quantity} د.ع
+                      {item.title} × {item.quantity} = {item.price * item.quantity} د.ع
                     </Text>
                   ))}
 
@@ -356,6 +362,7 @@ export default function Cared() {
             </View>
           )}
 
+          {/* زر OK */}
           {showOk && (
             <Pressable
               style={styles.okBtn}
@@ -363,6 +370,8 @@ export default function Cared() {
                 clearCart();
                 setOrderStatus(null);
                 setDelverData(null);
+                AsyncStorage.removeItem("orderStatus");
+                AsyncStorage.removeItem("delverData");
                 setShowOk(false);
                 setShowEmptyMessage(true);
               }}
@@ -390,7 +399,6 @@ const styles = StyleSheet.create({
   },
   orderBtnText: { color: "#fff", fontWeight: "bold" },
   mapContainer: { marginTop: 20 },
-  map: { height: 300 },
   statusContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
