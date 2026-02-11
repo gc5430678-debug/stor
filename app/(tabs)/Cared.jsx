@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Linking
+  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useCart } from "../../context/CartContext";
@@ -15,7 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import MapView, { Marker, AnimatedRegion } from "react-native-maps";
 import axios from "axios";
 
-const BASE_URL = "https://back-end-nodejs-production-d9de.up.railway.app";
+const BASE_URL = "https://back-end-nodejs-production-fdc5.up.railway.app";
 
 export default function Cared() {
   const { cartItems, removeFromCart, updateQuantity, totalPrice, clearCart } =
@@ -31,9 +31,11 @@ export default function Cared() {
   const [isLoading, setIsLoading] = useState(true);
   const [showOk, setShowOk] = useState(false);
 
-  const [orderedItems, setOrderedItems] = useState([]); // حفظ نسخة من الطلب
-  const [orderedTotal, setOrderedTotal] = useState(0);   // السعر الكلي
-  const [showEmptyMessage, setShowEmptyMessage] = useState(false); // ✅ السلة فارغة
+  const [orderedItems, setOrderedItems] = useState([]);
+  const [orderedTotal, setOrderedTotal] = useState(0);
+  const [showEmptyMessage, setShowEmptyMessage] = useState(false);
+
+  const [quantityError, setQuantityError] = useState({}); // لتخزين رسائل الخطأ لكل منتج
 
   const markerRef = useRef(null);
 
@@ -68,7 +70,6 @@ export default function Cared() {
     if (!email || !phone || !location || cartItems.length === 0) return;
 
     try {
-      // حفظ نسخة من الطلب قبل التفريغ
       setOrderedItems(cartItems);
       setOrderedTotal(totalPrice);
 
@@ -83,9 +84,7 @@ export default function Cared() {
 
       if (res.data.success) {
         setOrderStatus("pending");
-        clearCart(); // ← السلة تفريغها بعد الحفظ
-        setItemsData([]); 
-        setShowEmptyMessage(false); // السلة لم تظهر فارغة بعد الطلب مباشرة
+        setShowEmptyMessage(false);
       }
     } catch (err) {
       console.log(err);
@@ -190,6 +189,26 @@ export default function Cared() {
     );
   };
 
+  // ================= QUANTITY HANDLERS =================
+  const handleIncrease = (item) => {
+    const availableQty = item.quantityAvailable ?? 0; // ← استخدام الكمية المتوفرة من الباك اند
+    if (item.quantity + 1 > availableQty) {
+      setQuantityError((prev) => ({
+        ...prev,
+        [item.uniqueId]: "❌ الكمية غير متوفرة",
+      }));
+      return;
+    }
+    setQuantityError((prev) => ({ ...prev, [item.uniqueId]: null }));
+    updateQuantity(item.uniqueId, item.quantity + 1);
+  };
+
+  const handleDecrease = (item) => {
+    if (item.quantity - 1 < 1) return;
+    updateQuantity(item.uniqueId, item.quantity - 1);
+    setQuantityError((prev) => ({ ...prev, [item.uniqueId]: null }));
+  };
+
   if (isLoading) {
     return (
       <View style={styles.emptyContainer}>
@@ -203,34 +222,67 @@ export default function Cared() {
       {!orderStatus && cartItems.length > 0 && !showEmptyMessage && (
         <>
           <Text style={styles.title}>🛒 السلة</Text>
+
           <FlatList
             data={itemsData}
             keyExtractor={(item) => item.uniqueId}
             renderItem={({ item }) => (
               <View style={styles.card}>
+                {/* صورة المنتج */}
                 <Image
-                  source={{ uri: `${BASE_URL}${item.image}` }}
+                  source={{
+                    uri: item.image.startsWith("http")
+                      ? item.image
+                      : `${BASE_URL}${item.image}`,
+                  }}
                   style={styles.image}
                 />
-                <View style={styles.info}>
+
+                <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={styles.text}>{item.title}</Text>
                   <Text style={styles.text}>
                     {item.price * item.quantity} د.ع
                   </Text>
+
+                  {/* أزرار + و - */}
+                  <View style={styles.qtyContainer}>
+                    <Pressable
+                      style={styles.qtyBtn}
+                      onPress={() => handleDecrease(item)}
+                    >
+                      <Ionicons name="remove" size={18} color="#fff" />
+                    </Pressable>
+
+                    <Text style={styles.qtyText}>{item.quantity}</Text>
+
+                    <Pressable
+                      style={styles.qtyBtn}
+                      onPress={() => handleIncrease(item)}
+                    >
+                      <Ionicons name="add" size={18} color="#fff" />
+                    </Pressable>
+                  </View>
+
+                  {/* رسالة خطأ الكمية */}
+                  {quantityError[item.uniqueId] && (
+                    <Text style={{ color: "red", marginTop: 2 }}>
+                      {quantityError[item.uniqueId]}
+                    </Text>
+                  )}
                 </View>
+
+                {/* زر حذف */}
+                <Pressable onPress={() => removeFromCart(item.uniqueId)}>
+                  <Ionicons name="trash" size={22} color="red" />
+                </Pressable>
               </View>
             )}
           />
+
           <Pressable style={styles.orderBtn} onPress={handleOrder}>
             <Text style={styles.orderBtnText}>اطلب</Text>
           </Pressable>
         </>
-      )}
-
-      {!orderStatus && showEmptyMessage && (
-        <View style={{ alignItems: "center", marginTop: 50 }}>
-          <Text style={{ color: "#00E5FF", fontSize: 20 }}>🛒 السلة فارغة</Text>
-        </View>
       )}
 
       {orderStatus && location && (
@@ -245,19 +297,19 @@ export default function Cared() {
             }}
           >
             <Marker coordinate={{ latitude: clientLat, longitude: clientLng }} />
-            {delverData && (
-             <Marker.Animated
-  ref={markerRef}
-  coordinate={delverRegion}
-  title={`🚚 ${delverData.name}`}
->
-  <Image
-    source={require("../../assets/images/d.jpg")}
-    style={{ width: 50, height: 50 }}
-    resizeMode="contain"
-  />
-</Marker.Animated>
 
+            {delverData && (
+              <Marker.Animated
+                ref={markerRef}
+                coordinate={delverRegion}
+                title={`🚚 ${delverData.name}`}
+              >
+                <Image
+                  source={require("../../assets/images/d.jpg")}
+                  style={{ width: 50, height: 50 }}
+                  resizeMode="contain"
+                />
+              </Marker.Animated>
             )}
           </MapView>
 
@@ -267,10 +319,11 @@ export default function Cared() {
             <StatusIcon step="delivered" />
           </View>
 
-          {/* المندوب + رقم + المنتجات + السعر */}
           {delverData && (
             <View style={styles.delverInfo}>
-              <Text style={styles.delverText}>🚚 المندوب: {delverData.name}</Text>
+              <Text style={styles.delverText}>
+                🚚 المندوب: {delverData.name}
+              </Text>
 
               <Pressable
                 onPress={() =>
@@ -290,7 +343,8 @@ export default function Cared() {
                       key={item.uniqueId}
                       style={{ color: "#fff", fontSize: 14, marginTop: 2 }}
                     >
-                      {item.title} × {item.quantity} = {item.price * item.quantity} د.ع
+                      {item.title} × {item.quantity} ={" "}
+                      {item.price * item.quantity} د.ع
                     </Text>
                   ))}
 
@@ -306,10 +360,11 @@ export default function Cared() {
             <Pressable
               style={styles.okBtn}
               onPress={() => {
+                clearCart();
                 setOrderStatus(null);
                 setDelverData(null);
                 setShowOk(false);
-                setShowEmptyMessage(true); // ✅ بعد OK تظهر السلة فارغة
+                setShowEmptyMessage(true);
               }}
             >
               <Text style={styles.okText}>OK</Text>
@@ -324,9 +379,8 @@ export default function Cared() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#1e1b4b", padding: 20 },
   title: { color: "#00E5FF", fontSize: 22, fontWeight: "bold" },
-  card: { flexDirection: "row", marginBottom: 10 },
+  card: { flexDirection: "row", marginBottom: 10, alignItems: "center" },
   image: { width: 50, height: 50, borderRadius: 10 },
-  info: { marginLeft: 10 },
   text: { color: "#fff" },
   orderBtn: {
     backgroundColor: "#00E5FF",
@@ -351,7 +405,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   okText: { color: "#fff", fontWeight: "bold" },
-
   delverInfo: {
     marginTop: 15,
     backgroundColor: "#111827",
@@ -361,6 +414,16 @@ const styles = StyleSheet.create({
   },
   delverText: { color: "#00E5FF", fontSize: 16, fontWeight: "bold" },
   delverPhone: { color: "#fff", fontSize: 15, marginTop: 5 },
-
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  qtyContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 5,
+  },
+  qtyBtn: {
+    backgroundColor: "#00E5FF",
+    padding: 5,
+    borderRadius: 5,
+  },
+  qtyText: { color: "#fff", marginHorizontal: 10, fontSize: 16 },
 });

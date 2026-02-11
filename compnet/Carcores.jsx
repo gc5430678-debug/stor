@@ -12,7 +12,7 @@ import {
 import axios from "axios";
 import { useRouter } from "expo-router";
 
-const BASE_URL = "https://back-end-nodejs-production-d9de.up.railway.app";
+const BASE_URL = "https://back-end-nodejs-production-fdc5.up.railway.app";
 
 export default function Categories() {
   const [categories, setCategories] = useState([]);

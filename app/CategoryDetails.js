@@ -16,7 +16,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCart } from "../context/CartContext";
 
 // ⚡BASE_URL لا حاجة لإضافته قبل صور ImageBB، فقط للـ API
-const BASE_URL = "https://back-end-nodejs-production-d9de.up.railway.app";
+const BASE_URL = "https://back-end-nodejs-production-fdc5.up.railway.app";
 
 export default function CategoryDetails() {
   const { addToCart, cartItems, updateQuantity } = useCart();

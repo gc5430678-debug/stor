@@ -71,7 +71,7 @@ export default function App() {
 
   const register = async () => {
     setLoading(true);
-    const res = await fetch("https://back-end-nodejs-production-d9de.up.railway.app/api/auth/register", {
+    const res = await fetch("https://back-end-nodejs-production-fdc5.up.railway.app/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email }),
@@ -84,7 +84,7 @@ export default function App() {
 
   const verify = async () => {
     setLoading(true);
-    const res = await fetch("https://back-end-nodejs-production-d9de.up.railway.app/api/auth/verify", {
+    const res = await fetch("https://back-end-nodejs-production-fdc5.up.railway.app/api/auth/verify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, pin }),
@@ -108,7 +108,7 @@ export default function App() {
         return;
       }
 
-      const res = await fetch("https://back-end-nodejs-production-d9de.up.railway.app/api/user/save-info", {
+      const res = await fetch("https://back-end-nodejs-production-fdc5.up.railway.app/api/user/save-info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, phone, location }),
@@ -135,7 +135,7 @@ export default function App() {
       setLoading(true);
       await AsyncStorage.clear();
 
-      await fetch("https://back-end-nodejs-production-d9de.up.railway.app/api/auth/logout", {
+      await fetch("https://back-end-nodejs-production-fdc5.up.railway.app/api/auth/logout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
