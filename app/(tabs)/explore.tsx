@@ -34,20 +34,30 @@ export default function App() {
       return;
     }
 
-    const loc = await Location.getCurrentPositionAsync({});
-    const { latitude, longitude } = loc.coords;
+    try {
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const { latitude, longitude } = loc.coords;
 
-    const newRegion = {
-      latitude,
-      longitude,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    };
+      const newRegion = {
+        latitude,
+        longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      };
 
-    setRegion(newRegion);
-    setTempRegion(newRegion); // ✅ مؤقت
-    setLocation(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
-    setLoading(false); // 🔹 LOADING
+      setRegion(newRegion);
+      setTempRegion(newRegion); // ✅ مؤقت
+      setLocation(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+    } catch (err) {
+      Alert.alert(
+        "الموقع غير متوفر",
+        "تأكد من تفعيل خدمات الموقع (GPS) في إعدادات الجهاز ثم أعد المحاولة."
+      );
+    } finally {
+      setLoading(false); // 🔹 LOADING
+    }
   };
 
   useEffect(() => {
