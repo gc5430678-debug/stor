@@ -38,8 +38,6 @@ export default function Cared() {
   const [orderStatus, setOrderStatus] = useState(null);
   const [delverData, setDelverData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showOk, setShowOk] = useState(false);
-
   const [orderedItems, setOrderedItems] = useState([]);
   const [orderedTotal, setOrderedTotal] = useState(0);
   const [showEmptyMessage, setShowEmptyMessage] = useState(false);
@@ -91,6 +89,11 @@ export default function Cared() {
     };
     fetchUserData();
   }, [cartItems]);
+
+  // عند إضافة منتجات بعد تفريغ السلة → إخفاء رسالة السلة الفارغة
+  useEffect(() => {
+    if (cartItems.length > 0 && showEmptyMessage) setShowEmptyMessage(false);
+  }, [cartItems.length, showEmptyMessage]);
 
   // ================= ORDER =================
   const handleOrder = async () => {
@@ -377,6 +380,14 @@ export default function Cared() {
 
   return (
     <View style={styles.container}>
+      {/* ===================== سلة فارغة بعد OK ===================== */}
+      {showEmptyMessage && cartItems.length === 0 && (
+        <View style={styles.emptyCartBox}>
+          <Text style={styles.emptyCartTitle}>السلة فارغة</Text>
+          <Text style={styles.emptyCartSubtext}>أضف منتجات من القائمة واطلب من جديد</Text>
+        </View>
+      )}
+
       {/* ===================== قائمة السلة ===================== */}
       {!orderStatus && cartItems.length > 0 && !showEmptyMessage && (
         <>
@@ -456,104 +467,126 @@ export default function Cared() {
         </View>
       )}
 
-      {/* ===================== خريطة المندوب (تظهر فقط عند حالة accepted) ===================== */}
+      {/* ===================== خريطة المندوب + سكرول للشاشة بالكامل ===================== */}
       {orderStatus && location && delverData && (
         <View style={styles.mapContainer}>
-          <View style={{ height: 300 }}>
-            <WebView
-              ref={markerWebViewRef}
-              originWhitelist={["*"]}
-              source={{
-                html: getMapHtml(),
-              }}
-              javaScriptEnabled={true}
-              domStorageEnabled={true}
-            />
-          </View>
-
-          <StatusStepper />
-
-          {/* معلومات المندوب */}
-          {delverData && (
-            <View style={styles.delverInfo}>
-              <Text style={styles.delverText}>🚚 المندوب: {delverData.name}</Text>
-              <Pressable
-                onPress={() =>
-                  delverData.phone && Linking.openURL(`tel:${delverData.phone}`)
-                }
-                style={styles.phonePressable}
-              >
-                <Text style={styles.delverPhone}>
-                  📞 {delverData.phone || "غير متوفر"}
-                </Text>
-              </Pressable>
-
-              {/* منتجات الطلب بتصميم حديث */}
-              {orderedItems.length > 0 && (
-                <View style={styles.orderSummarySection}>
-                  <View style={styles.orderSummaryHeader}>
-                    <Ionicons name="receipt-outline" size={22} color="#00E5FF" />
-                    <Text style={styles.orderSummaryTitle}>منتجات طلبك</Text>
-                  </View>
-
-                  <ScrollView
-                    style={styles.orderProductsScroll}
-                    showsVerticalScrollIndicator={false}
-                    nestedScrollEnabled
-                  >
-                    {orderedItems.map((item) => (
-                      <View key={item.uniqueId} style={styles.orderProductCard}>
-                        <Image
-                          source={{
-                            uri: item.image?.startsWith("http")
-                              ? item.image
-                              : `${BASE_URL}${item.image}`,
-                          }}
-                          style={styles.orderProductImage}
-                        />
-                        <View style={styles.orderProductDetails}>
-                          <Text style={styles.orderProductName} numberOfLines={2}>
-                            {item.title}
-                          </Text>
-                          <Text style={styles.orderProductMeta}>
-                            {item.quantity} × {item.price?.toLocaleString?.() ?? item.price} د.ع
-                          </Text>
-                          <Text style={styles.orderProductTotal}>
-                            {item.price * item.quantity} د.ع
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-                  </ScrollView>
-
-                  <View style={styles.orderTotalRow}>
-                    <Text style={styles.orderTotalLabel}>المجموع الكلي</Text>
-                    <Text style={styles.orderTotalValue}>
-                      {orderedTotal?.toLocaleString?.() ?? orderedTotal} د.ع
-                    </Text>
-                  </View>
-                </View>
-              )}
+          <ScrollView
+            style={styles.mainScroll}
+            contentContainerStyle={styles.mainScrollContent}
+            showsVerticalScrollIndicator={true}
+          >
+            <View style={{ height: 300 }}>
+              <WebView
+                ref={markerWebViewRef}
+                originWhitelist={["*"]}
+                source={{
+                  html: getMapHtml(),
+                }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+              />
             </View>
-          )}
 
-          {/* زر OK */}
-          {showOk && (
+            <StatusStepper />
+
+            {/* معلومات المندوب + منتجات الطلب */}
+            {delverData && (
+              <View style={styles.delverInfo}>
+                <Text style={styles.delverText}>🚚 المندوب: {delverData.name}</Text>
+                <Pressable
+                  onPress={() =>
+                    delverData.phone && Linking.openURL(`tel:${delverData.phone}`)
+                  }
+                  style={styles.phonePressable}
+                >
+                  <Text style={styles.delverPhone}>
+                    📞 {delverData.phone || "غير متوفر"}
+                  </Text>
+                </Pressable>
+
+                {/* منتجات الطلب — سكرول لمشاهدة كل المنتجات (حتى 100+) */}
+                {orderedItems.length > 0 && (
+                  <View style={styles.orderSummarySection}>
+                    <View style={styles.orderSummaryHeader}>
+                      <Ionicons name="receipt-outline" size={22} color="#00E5FF" />
+                      <Text style={styles.orderSummaryTitle}>
+                        منتجات طلبك ({orderedItems.length})
+                      </Text>
+                    </View>
+
+                    <View style={styles.orderProductsScrollWrap}>
+                      <ScrollView
+                        style={styles.orderProductsScroll}
+                        contentContainerStyle={styles.orderProductsScrollContent}
+                        showsVerticalScrollIndicator={true}
+                        nestedScrollEnabled={true}
+                      >
+                        {orderedItems.map((item) => (
+                          <View key={item.uniqueId} style={styles.orderProductCard}>
+                            <Image
+                              source={{
+                                uri: item.image?.startsWith("http")
+                                  ? item.image
+                                  : `${BASE_URL}${item.image}`,
+                              }}
+                              style={styles.orderProductImage}
+                            />
+                            <View style={styles.orderProductDetails}>
+                              <Text style={styles.orderProductName} numberOfLines={2}>
+                                {item.title}
+                              </Text>
+                              <Text style={styles.orderProductMeta}>
+                                {item.quantity} × {item.price?.toLocaleString?.() ?? item.price} د.ع
+                              </Text>
+                              <Text style={styles.orderProductTotal}>
+                                {item.price * item.quantity} د.ع
+                              </Text>
+                            </View>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    </View>
+
+                    <View style={styles.orderTotalRow}>
+                      <Text style={styles.orderTotalLabel}>المجموع الكلي</Text>
+                      <Text style={styles.orderTotalValue}>
+                        {orderedTotal?.toLocaleString?.() ?? orderedTotal} د.ع
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* زر OK — لا يعمل إلا بعد "تم التوصيل"، عند الضغط سلة فارغة وطلب من جديد */}
             <Pressable
-              style={styles.okBtn}
+              style={[
+                styles.okBtn,
+                orderStatus !== "delivered" && styles.okBtnDisabled,
+              ]}
               onPress={() => {
+                if (orderStatus !== "delivered") return;
                 clearCart();
                 setOrderStatus(null);
                 setDelverData(null);
+                setOrderedItems([]);
+                setOrderedTotal(0);
                 AsyncStorage.removeItem("orderStatus");
                 AsyncStorage.removeItem("delverData");
-                setShowOk(false);
                 setShowEmptyMessage(true);
               }}
+              disabled={orderStatus !== "delivered"}
             >
-              <Text style={styles.okText}>OK</Text>
+              <Text
+                style={[
+                  styles.okText,
+                  orderStatus !== "delivered" && styles.okTextDisabled,
+                ]}
+              >
+                {orderStatus === "delivered" ? "OK" : "بانتظار التوصيل"}
+              </Text>
             </Pressable>
-          )}
+          </ScrollView>
         </View>
       )}
     </View>
@@ -588,7 +621,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   orderBtnText: { color: "#fff", fontWeight: "bold" },
-  mapContainer: { marginTop: 20 },
+  mapContainer: { marginTop: 20, flex: 1 },
+  mainScroll: { flex: 1 },
+  mainScrollContent: { paddingBottom: 40 },
+  orderProductsScrollWrap: { height: 320, marginVertical: 8 },
+  orderProductsScrollContent: { paddingBottom: 16 },
   statusCard: {
     marginTop: 16,
     backgroundColor: "rgba(17, 24, 39, 0.9)",
@@ -676,11 +713,32 @@ const styles = StyleSheet.create({
   okBtn: {
     marginTop: 20,
     backgroundColor: "#00E5FF",
-    padding: 12,
-    borderRadius: 10,
+    padding: 14,
+    borderRadius: 12,
     alignItems: "center",
   },
+  okBtnDisabled: {
+    backgroundColor: "rgba(100, 116, 139, 0.5)",
+    opacity: 0.85,
+  },
   okText: { color: "#fff", fontWeight: "bold" },
+  okTextDisabled: { color: "#cbd5e1" },
+  emptyCartBox: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  emptyCartTitle: {
+    color: "#00E5FF",
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  emptyCartSubtext: {
+    color: "#94a3b8",
+    fontSize: 15,
+  },
   delverInfo: {
     marginTop: 15,
     backgroundColor: "#111827",
@@ -715,7 +773,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
-  orderProductsScroll: { maxHeight: 220 },
+  orderProductsScroll: { flex: 1 },
   orderProductCard: {
     flexDirection: "row",
     alignItems: "center",
